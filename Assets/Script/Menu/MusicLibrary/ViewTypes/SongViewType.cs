@@ -97,7 +97,7 @@ namespace YARG.Menu.MusicLibrary
         public override void SecondaryTextClick()
         {
             base.SecondaryTextClick();
-           _musicLibrary.SetSearchInput(SongAttribute.Artist, SongEntry.Artist.SortStr);
+           _musicLibrary.SetSearchInput(SortAttribute.Artist, SongEntry.Artist.SortStr);
         }
 
         public override void PrimaryButtonClick()
@@ -113,7 +113,7 @@ namespace YARG.Menu.MusicLibrary
         public override void IconClick()
         {
             base.IconClick();
-           _musicLibrary.SetSearchInput(SongAttribute.Source, SongEntry.Source.SortStr);
+           _musicLibrary.SetSearchInput(SortAttribute.Source, SongEntry.Source.SortStr);
         }
 
         public override void FavoriteClick()

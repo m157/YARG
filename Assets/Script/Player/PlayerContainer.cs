@@ -1,13 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using YARG.Core;
 using YARG.Core.Game;
 using YARG.Helpers;
 using YARG.Input;
 using YARG.Input.Bindings;
+using YARG.Menu.MusicLibrary;
+using YARG.Settings;
 
 namespace YARG.Player
 {
@@ -28,6 +32,8 @@ namespace YARG.Player
         private static readonly Dictionary<Guid, YargProfile>       _profilesById     = new();
         private static readonly Dictionary<YargProfile, YargPlayer> _playersByProfile = new();
 
+        private static HashSet<Instrument> _instruments = new();
+
         /// <summary>
         /// A list of all of the profiles (taken or not).
         /// </summary>
@@ -37,6 +43,8 @@ namespace YARG.Player
         /// A list of all of the active players.
         /// </summary>
         public static IReadOnlyList<YargPlayer> Players => _players;
+
+        public static List<Instrument> Instruments => _instruments.ToList();
 
         static PlayerContainer()
         {
@@ -53,6 +61,7 @@ namespace YARG.Player
 
             _profiles.Add(profile);
             _profilesById.Add(profile.Id, profile);
+            TestForMenuRefresh();
             return true;
         }
 
@@ -65,6 +74,7 @@ namespace YARG.Player
 
             _profiles.Remove(profile);
             _profilesById.Remove(profile.Id);
+            TestForMenuRefresh();
             return true;
         }
 
@@ -89,7 +99,7 @@ namespace YARG.Player
             player.EnableInputs();
             _players.Add(player);
             _playersByProfile.Add(profile, player);
-
+            TestForMenuRefresh();
             return player;
         }
 
@@ -101,7 +111,7 @@ namespace YARG.Player
             _playersByProfile.Remove(player.Profile);
 
             player.Dispose();
-
+            TestForMenuRefresh();
             return true;
         }
 
@@ -116,8 +126,28 @@ namespace YARG.Player
 
             var bindings = BindingsContainer.GetBindingsForProfile(newProfile);
             player.SwapToProfile(newProfile, bindings, true);
-
+            TestForMenuRefresh();
             return true;
+        }
+
+        private static void TestForMenuRefresh()
+        {
+            HashSet<Instrument> instruments = new();
+            foreach (var player in  _players)
+            {
+                instruments.Add(player.Profile.CurrentInstrument);
+            }
+
+            if (!_instruments.SetEquals(instruments))
+            {
+                GlobalVariables.Instance.SongContainer.ResetPlayableSongs();
+                _instruments = instruments;
+
+                if (SettingsManager.Settings.LibrarySort == Song.SortAttribute.Playable)
+                {
+                    MusicLibraryMenu.SignalRefresh();
+                }
+            }
         }
 
         public static YargPlayer GetPlayerFromProfile(YargProfile profile)

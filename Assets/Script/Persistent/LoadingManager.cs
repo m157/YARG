@@ -149,7 +149,7 @@ namespace YARG
             }
 
             GlobalVariables.Instance.SongContainer = new SongContainer(task.Result);
-            MusicLibraryMenu.SetRefresh();
+            MusicLibraryMenu.SignalRefresh();
         }
 
         private void SetLoadingText(string phrase, string sub = null)

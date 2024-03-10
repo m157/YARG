@@ -3,9 +3,52 @@ using YARG.Core.Song.Cache;
 using YARG.Core.Song;
 using System;
 using YARG.Helpers.Extensions;
+using YARG.Core;
+using YARG.Helpers;
+using YARG.Player;
+using System.Linq;
 
 namespace YARG.Song
 {
+    public enum SortAttribute
+    {
+        Unspecified,
+        Name,
+        Artist,
+        Album,
+        Artist_Album,
+        Genre,
+        Year,
+        Charter,
+        Playlist,
+        Source,
+        SongLength,
+        DateAdded,
+        Playable,
+
+        Instrument,
+        FiveFretGuitar,
+        FiveFretBass,
+        FiveFretRhythm,
+        FiveFretCoop,
+        Keys,
+        SixFretGuitar,
+        SixFretBass,
+        SixFretRhythm,
+        SixFretCoop,
+        FourLaneDrums,
+        ProDrums,
+        FiveLaneDrums,
+        ProGuitar_17,
+        ProGuitar_22,
+        ProBass_17,
+        ProBass_22,
+        ProKeys,
+        Vocals,
+        Harmony,
+        Band
+    }
+
     public readonly struct SongCategory
     {
         public readonly string Category;
@@ -40,13 +83,14 @@ namespace YARG.Song
         private readonly List<SongCategory> _sortArtistAlbums = new();
         private readonly List<SongCategory> _sortSongLengths = new();
         private readonly List<SongCategory> _sortDatesAdded = new();
-        private readonly List<SongCategory> _sortInstruments = new();
+        private readonly Dictionary<Instrument, List<SongCategory>> _sortInstruments = new();
+
+        private List<SongCategory> _playables = null;
 
         public IReadOnlyDictionary<string, List<SongEntry>> Titles => _songCache.Titles;
         public IReadOnlyDictionary<string, List<SongEntry>> Years => _songCache.Years;
         public IReadOnlyDictionary<string, List<SongEntry>> ArtistAlbums => _songCache.ArtistAlbums;
         public IReadOnlyDictionary<string, List<SongEntry>> SongLengths => _songCache.SongLengths;
-        public IReadOnlyDictionary<string, List<SongEntry>> Instruments => _songCache.Instruments;
         public IReadOnlyDictionary<DateTime, List<SongEntry>> AddedDates => _songCache.DatesAdded;
         public IReadOnlyDictionary<SortString, List<SongEntry>> Artists => _songCache.Artists;
         public IReadOnlyDictionary<SortString, List<SongEntry>> Albums => _songCache.Albums;
@@ -54,6 +98,7 @@ namespace YARG.Song
         public IReadOnlyDictionary<SortString, List<SongEntry>> Charters => _songCache.Charters;
         public IReadOnlyDictionary<SortString, List<SongEntry>> Playlists => _songCache.Playlists;
         public IReadOnlyDictionary<SortString, List<SongEntry>> Sources => _songCache.Sources;
+        public IReadOnlyDictionary<Instrument, SortedDictionary<int, List<SongEntry>>> Instruments => _songCache.Instruments;
 
         public int Count => _songs.Count;
         public IReadOnlyDictionary<HashWrapper, List<SongEntry>> SongsByHash => _songCache.Entries;
@@ -79,7 +124,17 @@ namespace YARG.Song
             _sortYears = Cast(cache.Years);
             _sortArtistAlbums = Cast(cache.ArtistAlbums);
             _sortSongLengths = Cast(cache.SongLengths);
-            _sortInstruments = Cast(cache.Instruments);
+
+            _sortInstruments = new Dictionary<Instrument, List<SongCategory>>();
+            foreach (var instrument in cache.Instruments)
+            {
+                var list = new List<SongCategory>();
+                foreach(var difficulty in instrument.Value)
+                {
+                    list.Add(new SongCategory($"{instrument.Key.ToLocalizedName()} [{difficulty.Key}]", difficulty.Value));
+                }
+                _sortInstruments.Add(instrument.Key, list);
+            }
 
             _sortDatesAdded = new();
             foreach (var node in cache.DatesAdded)
@@ -114,25 +169,74 @@ namespace YARG.Song
                 return sections;
             }
         }
-
-        public IReadOnlyList<SongCategory> GetSortedSongList(SongAttribute sort)
+        public IReadOnlyList<SongCategory> this[SortAttribute sort]
         {
-            return sort switch
+            get
             {
-                SongAttribute.Name => _sortTitles,
-                SongAttribute.Artist => _sortArtists,
-                SongAttribute.Album => _sortAlbums,
-                SongAttribute.Genre => _sortGenres,
-                SongAttribute.Year => _sortYears,
-                SongAttribute.Charter => _sortCharters,
-                SongAttribute.Playlist => _sortPlaylists,
-                SongAttribute.Source => _sortSources,
-                SongAttribute.Artist_Album => _sortArtistAlbums,
-                SongAttribute.SongLength => _sortSongLengths,
-                SongAttribute.DateAdded => _sortDatesAdded,
-                SongAttribute.Instrument => _sortInstruments,
-                _ => throw new Exception("stoopid"),
-            };
+                return sort switch
+                {
+                    SortAttribute.Name => _sortTitles,
+                    SortAttribute.Artist => _sortArtists,
+                    SortAttribute.Album => _sortAlbums,
+                    SortAttribute.Genre => _sortGenres,
+                    SortAttribute.Year => _sortYears,
+                    SortAttribute.Charter => _sortCharters,
+                    SortAttribute.Playlist => _sortPlaylists,
+                    SortAttribute.Source => _sortSources,
+                    SortAttribute.Artist_Album => _sortArtistAlbums,
+                    SortAttribute.SongLength => _sortSongLengths,
+                    SortAttribute.DateAdded => _sortDatesAdded,
+                    SortAttribute.Playable => _playables,
+                    _ => throw new Exception("stoopid"),
+                };
+            }
+        }
+
+        public IReadOnlyList<SongCategory> this[Instrument instrument]
+        {
+            get
+            {
+                return _sortInstruments[instrument];
+            }
+
+        }
+
+        public void ResetPlayableSongs()
+        {
+            _playables = null;
+        }
+
+        public IReadOnlyList<SongCategory> GetPlayableSongs(IReadOnlyList<YargPlayer> players)
+        {
+            if (_playables == null)
+            {
+                if (players.Count == 0)
+                {
+                    _playables = new List<SongCategory>();
+                }
+                else
+                {
+                    var gamemodes = players.Select(player => player.Profile.GameMode).Distinct();
+
+                    IEnumerable<SongEntry> queries = null;
+                    foreach (var gamemode in gamemodes)
+                    {
+                        var list = gamemode.PossibleInstruments()
+                            .SelectMany(instrument => _songCache.Instruments[instrument])
+                            .SelectMany(group => group.Value)
+                            .Distinct();
+
+                        queries = queries == null ? list : queries.Intersect(list);
+                    }
+
+                    _playables = _sortTitles
+                        .Select(node => new SongCategory($"Playable [{node.Category}]", node.Songs.Intersect(queries).ToList()))
+                        .Where(node => node.Songs.Count > 0)
+                        .ToList();
+                }
+            }
+
+            return _playables;
         }
 
         public SongEntry GetRandomSong()

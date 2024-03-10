@@ -58,7 +58,7 @@ namespace YARG.Menu.Main
         public void CurrentlyPlaying()
         {
             MusicLibraryMenu.InitialSelect = MusicPlayer.NowPlaying;
-            MusicLibraryMenu.SetRefresh();
+            MusicLibraryMenu.SignalRefresh();
 
             QuickPlay();
         }
